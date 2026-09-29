@@ -1,5 +1,11 @@
 # fakeway
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/kishan-thanki/fakeway)](https://pkg.go.dev/github.com/kishan-thanki/fakeway)
+[![CI](https://github.com/Kishan-Thanki/fakeway/actions/workflows/ci.yml/badge.svg)](https://github.com/Kishan-Thanki/fakeway/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/Kishan-Thanki/fakeway?color=blue)](https://github.com/Kishan-Thanki/fakeway/releases/latest)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Kishan-Thanki/fakeway)](https://github.com/Kishan-Thanki/fakeway)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 `fakeway` HTTP mock server built with Go 1.22+. Test your server workflows, API clients, retries, and backend workflows.
 
 ## Features
