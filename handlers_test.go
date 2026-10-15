@@ -28,6 +28,46 @@ func TestHealthHandler(t *testing.T) {
 	}
 }
 
+func TestHealthzHandler(t *testing.T) {
+	router := setupRoutes()
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	expectedBody := "OK\n"
+	if rec.Body.String() != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, rec.Body.String())
+	}
+}
+
+func TestVersionHandler(t *testing.T) {
+	router := setupRoutes()
+
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var resp VersionResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode JSON response: %v", err)
+	}
+
+	if resp.Version != Version {
+		t.Errorf("expected version %q, got %q", Version, resp.Version)
+	}
+}
+
 func TestEchoHandler(t *testing.T) {
 	router := setupRoutes()
 

@@ -1,0 +1,9 @@
+.git
+.github
+*.exe
+*.dll
+*.so
+*.dylib
+dist
+fakeway
+
