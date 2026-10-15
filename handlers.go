@@ -11,9 +11,23 @@ import (
 
 const maxAllowedDelay = 30 * time.Second
 
+var Version = "dev"
+
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("OK\n"))
+}
+
+type VersionResponse struct {
+	Version string `json:"version"`
+}
+
+func handleVersion(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(VersionResponse{
+		Version: Version,
+	})
 }
 
 type EchoResponse struct {
@@ -158,6 +172,8 @@ func setupRoutes() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", handleHealth)
+	mux.HandleFunc("GET /healthz", handleHealth)
+	mux.HandleFunc("GET /version", handleVersion)
 	mux.HandleFunc("/echo", handleEcho)
 	mux.HandleFunc("GET /status/{code}", handleStatus)
 	mux.HandleFunc("GET /delay/{duration}", handleDelay)
