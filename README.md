@@ -34,33 +34,22 @@
 # Clone the repository
 git clone https://github.com/Kishan-Thanki/fakeway.git
 cd fakeway
+
+# Run tests
+go test -v ./...
+
+# Start the server (runs on http://localhost:8080)
+go run .
 ```
 
-### Run with Docker / GHCR
- 
+### Run with Docker
+
 ```bash
-# Pull and run the latest image from GHCR
+# Pull and run from GHCR
 docker run -d -p 8080:8080 ghcr.io/kishan-thanki/fakeway:latest
 
-# Or build locally
+# Or build and run locally
 docker build -t fakeway .
 docker run -d -p 8080:8080 fakeway
 ```
-
-### GHCR Package Access & Authentication
-
-If the package is set to **Public**, any server can pull without credentials:
-```bash
-docker pull ghcr.io/kishan-thanki/fakeway:latest
-```
-
-If the package is **Private**, authenticate on each server with a GitHub Personal Access Token (PAT) with `read:packages` scope:
-```bash
-echo "$GHCR_TOKEN" | docker login ghcr.io -u <GITHUB_USERNAME> --password-stdin
-```
-
-To make the package public:
-1. Go to your GitHub profile or repository -> **Packages**.
-2. Select `fakeway`.
-3. In **Package settings**, scroll down to **Danger Zone** -> **Change package visibility** and choose **Public**.
 
