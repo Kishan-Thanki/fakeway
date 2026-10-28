@@ -2,38 +2,54 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  ci:
-    name: Verify & Test
+  verify:
+    name: Verify Go project
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
-          go-version: '1.22.x'
+          go-version: '1.27.3'
           cache: true
+          cache-dependency-path: go.mod
 
-      - name: Verify Code Formatting
-        run: |
-          if [ -n "$(gofmt -l .)" ]; then
-            echo "The following files are not formatted properly:"
-            gofmt -l .
-            exit 1
-          fi
+      - name: Run Makefile checks and build
+        run: make full VERSION=ci
 
-      - name: Run Static Analysis (go vet)
-        run: go vet ./...
+  docker-smoke:
+    name: Build and smoke-test Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
-      - name: Run Unit Tests with Race Detector
-        run: go test -v -race -cover ./...
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      - name: Verify Static Binary Build
-        run: CGO_ENABLED=0 go build -ldflags="-s -w" -v -o fakeway .
+      - name: Build image and test HTTP endpoint
+        run: make docker-smoke VERSION=ci DOCKER_SMOKE_PORT=18081

@@ -6,81 +6,124 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  binaries:
-    name: Build & Attach Release Binaries
+  verify:
+    name: Verify tagged source
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
-          go-version: '1.22.x'
+          go-version: '1.27.3'
           cache: true
+          cache-dependency-path: go.mod
 
-      - name: Extract Tag / Version
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
-
-      - name: Build Lightweight Standalone Binaries
+      - name: Validate release tag
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
-          mkdir -p dist
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
-          LDFLAGS="-s -w -X main.Version=${VERSION}"
-          # -s -w strips DWARF debugging tables and symbol tables for minimal binary footprint
-          # CGO_ENABLED=0 produces a fully static, standalone binary
-          GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/fakeway-linux-amd64 .
-          GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/fakeway-linux-arm64 .
-          GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/fakeway-darwin-amd64 .
-          GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/fakeway-darwin-arm64 .
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o dist/fakeway-windows-amd64.exe .
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $VERSION"
+            echo "Use vMAJOR.MINOR.PATCH, optionally followed by a prerelease suffix."
+            exit 1
+          fi
 
-      - name: Create Immutable GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Run Makefile checks and build
+        run: make full VERSION="${GITHUB_REF_NAME}"
+
+  binaries:
+    name: Build and publish release binaries
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.3'
+          cache: true
+          cache-dependency-path: go.mod
+
+      - name: Build release binaries and checksums
+        run: make release-binaries VERSION="${GITHUB_REF_NAME}"
+
+      - name: Verify release checksums
+        run: make verify-checksums DIST_DIR=dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3.0.3
         with:
           files: dist/*
+          fail_on_unmatched_files: true
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   docker:
-    name: Build & Push Docker Image to GHCR
+    name: Build and publish multi-architecture image
+    needs: verify
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4.3.0
 
-      - name: Log in to GitHub Container Registry (GHCR)
-        uses: docker/login-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Normalize image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6.2.0
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ steps.image.outputs.name }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest
+          flavor: |
+            latest=auto
 
-      - name: Build and Push Multi-arch Docker Image
-        uses: docker/build-push-action@v5
+      - name: Build and push multi-architecture Docker image
+        uses: docker/build-push-action@v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -89,3 +132,7 @@ jobs:
             VERSION=${{ github.ref_name }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=fakeway-release
+          cache-to: type=gha,mode=max,scope=fakeway-release

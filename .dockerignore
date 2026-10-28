@@ -1,9 +1,29 @@
+# Git and CI
 .git
 .github
+
+# Environment files
+.env
+
+# Binaries
 *.exe
+*.exe~
 *.dll
 *.so
 *.dylib
-dist
-fakeway
+/fakeway
+/dist/
 
+# Test and coverage artifacts
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Go workspace files
+go.work
+go.work.sum
+
+# macOS
+.DS_Store
