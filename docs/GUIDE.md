@@ -2,7 +2,7 @@
 
 Fakeway is a lightweight HTTP mock server for testing how API clients handle HTTP status codes, headers, redirects, latency, and request data without requiring a real backend.
 
-For installation and a quick start, see the [README](README.md).
+For installation and a quick start, see the [README](../README.md).
 
 ## Contents
 
@@ -180,6 +180,9 @@ A valid unsatisfiable range produces `416 Range Not Satisfiable` with `Content-R
 ## Echoing requests
 
 Use `/echo` to inspect what Fakeway receives:
+
+Request bodies are limited to 1 MiB. Larger request bodies receive an
+HTTP `413 Payload Too Large` response.
 
 ```bash
 curl 'http://localhost:8080/echo?name=fakeway&mode=test'

@@ -21,20 +21,26 @@ const shutdownTimeout = 30 * time.Second
 func Run() error {
 	cfg := parseFlags()
 
-	server := &http.Server{
-		Addr:         cfg.addr,
-		Handler:      httpapi.NewHandler(),
-		ReadTimeout:  cfg.readTimeout,
-		WriteTimeout: cfg.writeTimeout,
-		IdleTimeout:  cfg.idleTimeout,
-	}
-
 	sigCtx, stop := signal.NotifyContext(
 		context.Background(),
 		os.Interrupt,
 		syscall.SIGTERM,
 	)
 	defer stop()
+
+	return runServer(cfg, sigCtx, httpapi.NewHandler())
+}
+
+// runServer runs the HTTP server until it fails to start or the context is
+// cancelled. The handler is supplied by Run and can be replaced in tests.
+func runServer(cfg config, sigCtx context.Context, handler http.Handler) error {
+	server := &http.Server{
+		Addr:         cfg.addr,
+		Handler:      handler,
+		ReadTimeout:  cfg.readTimeout,
+		WriteTimeout: cfg.writeTimeout,
+		IdleTimeout:  cfg.idleTimeout,
+	}
 
 	serverErr := make(chan error, 1)
 

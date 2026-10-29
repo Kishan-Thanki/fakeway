@@ -2,17 +2,49 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"time"
 )
 
 const (
-	MAX_ALLOWED_DELAY = 30 * time.Second
+	MAX_ALLOWED_DELAY  = 30 * time.Second
+	MAX_ECHO_BODY_SIZE = 1 << 20 // 1 MiB
 )
 
 var Version = "development"
+
+func init() {
+	// Preserve an explicit version supplied through -ldflags.
+	if Version != "development" {
+		return
+	}
+
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+
+	if version := versionFromBuildInfo(info); version != "" {
+		Version = version
+	}
+}
+
+func versionFromBuildInfo(info *debug.BuildInfo) string {
+	if info == nil {
+		return ""
+	}
+
+	version := info.Main.Version
+	if version == "" || version == "(devel)" {
+		return ""
+	}
+
+	return version
+}
 
 type VersionResponse struct {
 	Version string `json:"version"`
@@ -69,21 +101,6 @@ func writeJSON(
 	}
 }
 
-func writeProblem(
-	w http.ResponseWriter,
-	r *http.Request,
-	status int,
-	detail string,
-) {
-	writeJSON(w, r, status, "application/problem+json", ProblemResponse{
-		Type:     "about:blank",
-		Title:    statusDescription(status),
-		Status:   status,
-		Detail:   detail,
-		Instance: r.URL.Path,
-	})
-}
-
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("OK\n"))
@@ -98,9 +115,30 @@ func handleVersion(w http.ResponseWriter, r *http.Request) {
 func handleEcho(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	bodyBytes, err := io.ReadAll(r.Body)
+	limitedBody := http.MaxBytesReader(
+		w,
+		r.Body,
+		MAX_ECHO_BODY_SIZE,
+	)
+
+	bodyBytes, err := io.ReadAll(limitedBody)
 	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+		status := http.StatusBadRequest
+		detail := "Failed to read the request body."
+
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			status = http.StatusRequestEntityTooLarge
+			detail = "Request body exceeds the 1 MiB limit for /echo."
+		}
+
+		writeJSON(w, r, status, "application/problem+json", ProblemResponse{
+			Type:     "about:blank",
+			Title:    statusDescription(status),
+			Status:   status,
+			Detail:   detail,
+			Instance: r.URL.Path,
+		})
 		return
 	}
 

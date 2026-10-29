@@ -5,6 +5,12 @@
 # Environment files
 .env
 
+# Documentation & Build Scripts (Add these!)
+README.md
+Makefile
+docs/
+Dockerfile
+
 # Binaries
 *.exe
 *.exe~

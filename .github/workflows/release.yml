@@ -20,12 +20,12 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@v5
         with:
           go-version: '1.27.3'
           cache: true
@@ -41,8 +41,12 @@ jobs:
             exit 1
           fi
 
-      - name: Run Makefile checks and build
-        run: make full VERSION="${GITHUB_REF_NAME}"
+      - name: Run Tests & Build
+        run: |
+          go test -v -race ./...
+          CGO_ENABLED=0 go build -trimpath -buildvcs=false \
+            -ldflags="-s -w -X github.com/kishan-thanki/fakeway/internal/httpapi.Version=${{ github.ref_name }}" \
+            -o fakeway .
 
   binaries:
     name: Build and publish release binaries
@@ -54,25 +58,38 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@v5
         with:
           go-version: '1.27.3'
           cache: true
           cache-dependency-path: go.mod
 
-      - name: Build release binaries and checksums
-        run: make release-binaries VERSION="${GITHUB_REF_NAME}"
+      - name: Build cross-platform binaries and checksums
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="-s -w -X github.com/kishan-thanki/fakeway/internal/httpapi.Version=${VERSION}" -o dist/fakeway-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags="-s -w -X github.com/kishan-thanki/fakeway/internal/httpapi.Version=${VERSION}" -o dist/fakeway-linux-arm64 .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="-s -w -X github.com/kishan-thanki/fakeway/internal/httpapi.Version=${VERSION}" -o dist/fakeway-darwin-amd64 .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags="-s -w -X github.com/kishan-thanki/fakeway/internal/httpapi.Version=${VERSION}" -o dist/fakeway-darwin-arm64 .
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags="-s -w -X github.com/kishan-thanki/fakeway/internal/httpapi.Version=${VERSION}" -o dist/fakeway-windows-amd64.exe .
+          
+          cd dist
+          sha256sum fakeway-* > SHA256SUMS
 
       - name: Verify release checksums
-        run: make verify-checksums DIST_DIR=dist
+        run: |
+          cd dist
+          sha256sum --check SHA256SUMS
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           fail_on_unmatched_files: true
@@ -92,15 +109,15 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.3.0
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4.6.0
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -112,7 +129,7 @@ jobs:
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@v6.2.0
+        uses: docker/metadata-action@v5
         with:
           images: ${{ steps.image.outputs.name }}
           tags: |
@@ -123,7 +140,7 @@ jobs:
             latest=auto
 
       - name: Build and push multi-architecture Docker image
-        uses: docker/build-push-action@v7.4.0
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
